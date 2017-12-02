@@ -1,0 +1,222 @@
+---
+title: "TDA and TDAmapper"
+author: "Kaisa Taipale"
+date: "November 30, 2017"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## What is TDA?
+
+Topological Data Analysis (TDA) is a way of looking at the topology of data, rather than linear fits or probability models. What's the **shape** of data?
+
+Pros: shape persists however you "rotate" your data (point of view matters less).
+
+
+## Today: TDA with R
+
+- Example of a circle with TDA and TDAmapper packages
+- Example of an infinity symbol
+- Stock data (messy, real life)
+
+## Packages
+```{r packagestouse, echo=TRUE, message=FALSE}
+library(BatchGetSymbols)
+library(reshape2)
+library(TDA)
+library(TDAmapper)
+library(igraph)
+```
+## Circle first
+```{r circle, echo = TRUE}
+circle1 <- circleUnif(60)
+circle2 <- circleUnif(60,r=2)+3
+circles <- rbind(circle1,circle2)
+plot(circles)
+```
+
+
+## Circle persistence diagram
+Persistence diagram: birth and death of homology classes
+```{r circlepersistent}
+circleDiag<-ripsDiag(circles,maxscale=4, maxdimension = 1,library = "GUDHI")
+plot(circleDiag[["diagram"]])
+```
+
+## TDAmapper for the circle
+
+```{r ciclemapperex, echo=TRUE, message=FALSE}
+circlemapper <- mapper1D(distance_matrix=dist(circles), filter_values = circles[,1], 
+  num_intervals =  12, 
+  percent_overlap = 50,
+  num_bins_when_clustering =12)
+g2 <- graph.adjacency(circlemapper$adjacency,   
+  mode="undirected")
+```
+## Plot result from TDAmapper for circles
+```{r resultforcircles, echo=TRUE, message=FALSE}
+plot(g2, layout = layout.auto(g2) )
+```
+
+## Infinity symbol
+```{r infinity, echo = TRUE}
+infinitydf<- cbind(2*cos(0.5*(1:100)),sin(1:100))
+plot(infinitydf)
+```
+
+## Persistence diagram
+```{r infintypersistence}
+infinityDiag<-ripsDiag(infinitydf,
+  maxscale = 1.6, 
+  maxdimension = 1)
+plot(infinityDiag[["diagram"]])
+```
+
+## TDAmapper
+
+```{r infinitymapperexample, echo=TRUE}
+infinitymapper <- mapper1D(distance_matrix=dist(infinitydf), 
+  filter_values = infinitydf[,1], 
+  num_intervals =  12, 
+  percent_overlap = 50,
+  num_bins_when_clustering =12)
+
+g2 <- graph.adjacency(infinitymapper$adjacency, 
+  mode="undirected")
+```
+
+
+## TDAmapper for infinity symbol
+```{r plotfortheinfinity, echo=FALSE}
+plot(g2, layout = layout.auto(g2) )
+```
+
+## Financial data!
+- With students Jacqueline Cai and Hao Li at the University of Minnesota
+- Inspired by paper "Topology Data Analysis Of Critical Transitions in
+Financial Networks" by Marian Gidea
+- Visualize transition in stock correlations before crisis (?)
+
+
+## Get stock data and make log returns matrix
+
+```{r stockdata, echo = TRUE, message=FALSE}
+first.date <- as.Date('2004/01/01')
+last.date <- as.Date('2009/09/30')
+tickers <- c('MMM','AXP','AAPL','BA','CAT','CVX','CSCO','KO','DWDP','XOM','GE','GS','HD','IBM','INTC','JNJ','JPM','MCD','MRK','MSFT','NKE','PFE','PG','TRV','UNH','UTX','VZ','WMT','DIS')
+data <- BatchGetSymbols(tickers = tickers,
+                        first.date = first.date,
+                        last.date = last.date)
+newdata <- BatchGetSymbols(tickers = tickers,
+            first.date = as.Date('2017/05/01'),
+            last.date = as.Date('2017/10/01'))
+widestock <- dcast(data$df.tickers[,6:8], ref.date ~ ticker, value.var="price.adjusted")
+logrets <- apply(widestock[,2:30], 2, 
+                function(x) diff(log(x), lag=1))
+```
+
+## Make a correlation matrix for the log returns
+Correlation matrices are really easy!
+```{r correlationmatrix, echo=TRUE}
+first100cor <- cor(logrets[1:100,], method = "pearson")
+second100cor <- cor(logrets[101:200,], method = "pearson")
+```
+## Graphing the correlation networks
+
+Let's make a matrix by looking at a "super-level set," basically only showing edges when stocks have highly correlated log returns. Notice I'm making a "distance" matrix out of the correlation matrix.
+```{r superlevel100, echo=TRUE}
+highcor100mat <- sqrt(2*(first100cor+1))
+highcorsuperlevel100 <- ifelse (highcor100mat>1.8, highcor100mat,0)
+network=graph_from_adjacency_matrix(highcorsuperlevel100, 
+        weighted=TRUE, 
+        mode="undirected", 
+        diag=F)
+
+```
+## Plot for first 100 days
+```{r plotfirst100, echo=TRUE}
+plot(network)
+```
+
+
+## Plot for second 100 days
+```{r superlevel200}
+highcor200mat <- sqrt(2*(second100cor+1))
+highcorsuperlevel200 <- ifelse (highcor200mat>1.8, highcor200mat,0)
+network=graph_from_adjacency_matrix(highcorsuperlevel200, 
+          weighted=TRUE, 
+          mode="undirected", 
+          diag=F)
+plot(network)
+```
+
+
+## Financial crisis 100 days
+Look now at 100 days starting December 21, 2007.
+```{r superlevel1000}
+later1000cor <- cor(logrets[1001:1100,], method = "pearson")
+highcor1000mat <- sqrt(2*(later1000cor+1))
+highcorsuperlevel1000 <- ifelse (highcor1000mat>1.8, highcor1000mat,0)
+network=graph_from_adjacency_matrix(highcorsuperlevel1000, weighted=TRUE, mode="undirected", diag=F)
+plot(network)
+```
+
+## Financial crisis 1200 days
+And now October-November-December 2008
+```{r superlevel1200}
+later1200cor <- cor(logrets[1201:1300,], method = "pearson")
+highcor1200mat <- sqrt(2*(later1200cor+1))
+highcorsuperlevel1200 <- ifelse (highcor1200mat>1.8, highcor1200mat,0)
+network=graph_from_adjacency_matrix(highcorsuperlevel1200, weighted=TRUE, mode="undirected", diag=F)
+plot(network)
+```
+
+## Persistence diagram for stock data
+We can make a persistence diagram for the stock data as well, to see if any "circles" exist or persist.
+```{r stockdatapersistent, echo=TRUE}
+first100persistence <- ripsDiag(highcor100mat,maxscale=2,maxdimension = 1,dist="arbitrary")
+
+plot(first100persistence[["diagram"]])
+
+```
+
+
+## The next 200 days
+Persistence diagram for the next 200 days, still in 2004-2005.
+```{r nextpersistencediag}
+second100persistence <- ripsDiag(highcor200mat,maxscale=2,maxdimension = 1,dist="arbitrary")
+plot(second100persistence[["diagram"]])
+```
+
+## 1001-1100 days
+Persistence diagram for the network from 2007.
+```{r 2007persistencediag}
+crisispersistence <- ripsDiag(highcor1000mat,maxscale=2,maxdimension = 1,dist="arbitrary")
+plot(crisispersistence[["diagram"]])
+```
+
+## 1001-1100 days
+Persistence diagram for the network from 2007.
+```{r 2008persistencediag}
+crisis2persistence <- ripsDiag(highcor1200mat,maxscale=2,maxdimension = 1,dist="arbitrary")
+plot(crisis2persistence[["diagram"]])
+```
+
+## What about now? 
+
+```{r now, echo=FALSE}
+
+newwidestock <- dcast(newdata$df.tickers[,6:8],ref.date~ticker, value.var="price.adjusted")
+newlogrets <- apply(widestock[,2:30],2, function(x) diff(log(x), lag=1))
+newcor<-cor(newlogrets, method="pearson")
+
+highcornew <-sqrt(2*(newcor+1))
+highcorsuperlevel <-ifelse(highcornew>1.8,highcornew, 0)
+network = graph_from_adjacency_matrix(highcorsuperlevel, weighted=TRUE, mode="undirected", diag=F)
+plot(network)
+```
+
+
